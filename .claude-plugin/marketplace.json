@@ -1,0 +1,37 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-plugins",
+  "description": "Storj-managed directory of Claude Code plugins.",
+  "owner": {
+    "name": "Storj",
+    "email": "artur@storj.io"
+  },
+  "plugins": [
+    {
+      "name": "storj-developer",
+      "description": "Agents and skills for Storj backend development: Gerrit review workflow, DBX regeneration, Postgres/Spanner test runners, and a focused Storj code-review agent.",
+      "author": {
+        "name": "Storj",
+        "email": "artur@storj.io"
+      },
+      "category": "development",
+      "source": "./plugins/storj-developer",
+      "homepage": "https://github.com/storj/claude-plugins"
+    },
+    {
+      "name": "andrej-karpathy-skills",
+      "description": "Behavioral guidelines to reduce common LLM coding mistakes: Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution.",
+      "author": {
+        "name": "forrestchang"
+      },
+      "category": "workflow",
+      "source": {
+        "source": "github",
+        "repo": "multica-ai/andrej-karpathy-skills",
+        "ref": "main",
+        "sha": "2c606141936f1eeef17fa3043a72095b4765b9c2"
+      },
+      "homepage": "https://github.com/multica-ai/andrej-karpathy-skills"
+    }
+  ]
+}

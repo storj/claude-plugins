@@ -1,0 +1,8 @@
+{
+  "name": "storj-developer",
+  "description": "Agents and skills for Storj backend development: Gerrit review workflow, DBX regeneration, Postgres/Spanner test runners, and a focused Storj code-review agent.",
+  "author": {
+    "name": "Storj",
+    "email": "artur@storj.io"
+  }
+}
