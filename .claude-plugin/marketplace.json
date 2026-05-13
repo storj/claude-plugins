@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "claude-plugins",
+  "name": "storj-plugins",
   "description": "Storj-managed directory of Claude Code plugins.",
   "owner": {
     "name": "Storj",

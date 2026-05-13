@@ -6,12 +6,12 @@ Storj-managed [Claude Code plugin](https://code.claude.com/docs/en/plugins) mark
 
 ```
 /plugin marketplace add storj/claude-plugins
-/plugin install storj-developer@claude-plugins
+/plugin install storj-developer@storj-plugins
 ```
 
 ### Recommended extras
 
-- **andrej-karpathy-skills** — `/plugin install andrej-karpathy-skills@claude-plugins` (LLM coding-mistake guidelines, sourced from [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills))
+- **andrej-karpathy-skills** — `/plugin install andrej-karpathy-skills@storj-plugins` (LLM coding-mistake guidelines, sourced from [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills))
 - **gopls-lsp** — `/plugin install gopls-lsp@claude-plugins-official` (requires [`gopls`](https://pkg.go.dev/golang.org/x/tools/gopls))
 - **[Playwright CLI](https://github.com/microsoft/playwright-cli)** — browser automation for coding agents
   ```
