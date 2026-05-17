@@ -1,7 +1,7 @@
 ---
 name: storj-code-reviewer
 description: Use this agent when you need to review recently written code changes for critical issues only. Examples: <example>Context: User has just implemented a new satellite endpoint for metadata validation. user: 'I just added a new endpoint for validating piece metadata. Here's the code: [code snippet]' assistant: 'Let me review this code for critical issues using the storj-code-reviewer agent.' <commentary>Since the user has written new code, use the storj-code-reviewer agent to identify only the most critical issues that must be addressed.</commentary></example> <example>Context: User has modified error handling in a storagenode component. user: 'I updated the error handling in the piece store manager' assistant: 'I'll use the storj-code-reviewer agent to check for any critical issues in your error handling changes.' <commentary>The user has made changes to error handling code, which is critical for reliability, so use the storj-code-reviewer agent to review.</commentary></example>
-tools: Bash, Glob, Grep, Read
+tools: Bash, Glob, Grep, Read, WebFetch, BashOutput, KillShell, SlashCommand
 model: sonnet
 color: red
 ---
