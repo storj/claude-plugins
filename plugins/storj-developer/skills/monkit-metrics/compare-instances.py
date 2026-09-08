@@ -6,8 +6,9 @@ two regions, etc.).
 Usage: adapt HOSTS, METHODS, and the time window to your investigation, then
 run. Output is one line per method with avg-ms on each side and the ratio.
 
-Note: queries hit Prometheus directly. For Storj/Thanos-behind-auth, swap the
-query_range() body for an mcp__grafana__query_prometheus call instead.
+Note: queries hit Prometheus directly. For the Storj datasource behind Grafana
+auth, swap the query_range() body for an mcp__grafana-cloud__query_prometheus
+call against uid ffqrvx0pyhp8gf instead.
 """
 
 import urllib.parse

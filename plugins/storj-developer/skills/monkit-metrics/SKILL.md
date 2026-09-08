@@ -1,6 +1,6 @@
 ---
 name: monkit-metrics
-description: Use when investigating latency, throughput, error rate, or concurrency of any Storj Go service (satellite, storagenode, gateway, linksharing, etc.), comparing performance across pods/nodes/regions, finding which Go functions are instrumented, or interpreting monkit `function` / `function_times` series from Thanos/Prometheus.
+description: Use when investigating latency, throughput, error rate, or concurrency of any Storj Go service (satellite, storagenode, gateway, linksharing, etc.), comparing performance across pods/nodes/regions, finding which Go functions are instrumented, or interpreting monkit `function` / `function_times` series from VictoriaMetrics/Prometheus.
 ---
 
 # Monkit Prometheus Metrics
@@ -33,12 +33,40 @@ Values are in **seconds** — multiply by 1000 for ms.
 
 ### `field` values
 
-| Field | Meaning |
-|---|---|
-| `count`, `sum`, `min`, `max` | Cumulative since process start |
-| `r10`, `r50`, `r90`, `r99` | Percentile latency (rolling reservoir) |
-| `rmin`, `rmax`, `ravg` | Min/max/avg over the rolling window |
-| `recent` | Most recent observation |
+| Field | Meaning | Available where |
+|---|---|---|
+| `count`, `sum` | Cumulative since process start | **everywhere** |
+| `recent` | Most recent observation | **everywhere** |
+| `min`, `max` | Cumulative min/max | Prometheus-scraped envs only |
+| `r10`, `r50`, `r90`, `r99` | Percentile latency (rolling reservoir) | Prometheus-scraped envs only |
+| `rmin`, `rmax`, `ravg` | Min/max/avg over the rolling window | Prometheus-scraped envs only |
+
+#### Percentiles are NOT available in every environment
+
+Which `field` values exist depends on the **scrape path**, not the metric. Verified
+2026-09-08 on `ffqrvx0pyhp8gf`:
+
+| `environment_name` | Scraped by | `field` values present |
+|---|---|---|
+| `storj-prod-satellite-us1` / `-eu1` / `-ap1` / `-slc` | in-cluster Prometheus | full set incl. `r10`–`r99`, `rmin`/`rmax`/`ravg`, `min`, `max` |
+| `storj-select`, `dp-prod-edge-*`, `storj-qa-satellite` | node-level **otelcol** | **only `count`, `recent`, `sum`** |
+
+So `field="r99"` silently returns **no series** for the select and edge fleets — and a
+no-data result looks identical to a wrong label name, which is an easy hour to lose.
+
+**Portable fallback that works in every environment — mean latency:**
+
+```promql
+sum(rate(function_times{..., field="sum"}[10m]))
+  /
+sum(rate(function_times{..., field="count"}[10m]))
+```
+
+Before assuming a field exists, check:
+
+```promql
+count by (field, kind) (function_times{environment_name="...", scope="...", name="..."})
+```
 
 ## `function` — call counters & concurrency
 
@@ -109,32 +137,34 @@ To trace direct callees: find method calls in the function body, locate their de
 
 ## Querying via Grafana MCP
 
-This is the primary path — Thanos sits behind Grafana auth and direct `curl` won't work.
+This is the primary path — the datasource sits behind Grafana auth, so direct `curl` won't work.
 
 ### Datasource UIDs
 
-| Datasource | UID | Use for |
-|---|---|---|
-| Thanos Team Satellite | `adoggz37zfda8f` | Satellite-only metrics — fastest for satellite work |
-| Thanos | `P5DCFC7561CCDE821` | Org-wide default — use for storagenode, gateway, linksharing, multinode, or anything non-satellite |
-| Thanos Archive | `P841A199C294D65A0` | Older data outside the live Thanos retention |
+Use **`ffqrvx0pyhp8gf`** — VictoriaMetrics (victoria.intra.storj.tools), the default
+Prometheus datasource. It carries monkit `function` / `function_times` for **all** four prod
+satellites plus the select fleet, the edge/gateway fleet and QA. Confirmed 2026-09-08.
 
-Verify with `mcp__grafana__list_datasources(type="prometheus")` if these change.
+That is the only metrics datasource in use. Infrastructure metrics live here too, under
+their own job labels — e.g. the Crunchbits-PA TiDB cluster is
+`{job="tidb_cluster", server_name=~"cb-prod-us1-pa-[1-7]"}`.
+
+Verify with `mcp__grafana-cloud__list_datasources(type="prometheus")` if this changes.
 
 ### Discovery workflow
 
 ```text
 # 1. Confirm the metric exists in this datasource
-mcp__grafana__list_prometheus_metric_names(
+mcp__grafana-cloud__list_prometheus_metric_names(
     datasourceUid="adoggz37zfda8f", regex="function_times")
 
 # 2. Discover real label values (don't guess `environment_name`s)
-mcp__grafana__list_prometheus_label_values(
+mcp__grafana-cloud__list_prometheus_label_values(
     datasourceUid="adoggz37zfda8f", labelName="environment_name",
     matches=[{"filters":[{"name":"__name__","type":"=","value":"function_times"}]}])
 
 # 3. Query
-mcp__grafana__query_prometheus(
+mcp__grafana-cloud__query_prometheus(
     datasourceUid="adoggz37zfda8f",
     expr='function_times{name="__Endpoint__CommitObject", scope=~".*satellite_metainfo", field="r99", kind="success"}',
     queryType="range", startTime="now-1h", endTime="now", stepSeconds=60)
@@ -143,16 +173,17 @@ mcp__grafana__query_prometheus(
 - `queryType="instant"` → single point right now. Use to sanity-check a label combo exists.
 - `queryType="range"` → time series. Requires `startTime`, `endTime`, `stepSeconds`.
 - Times accept RFC3339 (`2026-05-19T22:00:00Z`) or relative (`now`, `now-1h`, `now-30m`).
-- Use `mcp__grafana__generate_deeplink` to hand the engineer a Grafana Explore URL when reporting findings.
+- Use `mcp__grafana-cloud__generate_deeplink` to hand the engineer a Grafana Explore URL when reporting findings.
 
 ### Correlating with logs
 
-When a latency spike lines up with errors, jump to Loki:
+Storj app logs are in **VictoriaLogs uid `bfx67nh13k5j4f`**, not Loki
+(`grafanacloud-logs` has no `environment_name` values). Query with
+`mcp__grafana-cloud__query_loki_logs` but pass **LogsQL** and `queryType: "range"` —
+`instant` returns nothing. Message text is `_msg`, not `msg`; satellite Go logs use
+`severity`, not `level`. Aggregate with `| stats by (...) count()`; never dump raw records.
 
-```text
-mcp__grafana__query_loki_logs(...)            # raw log lines around the spike
-mcp__grafana__find_error_pattern_logs(...)    # Sift-based pattern detection
-```
+See the repo-local **`satellite-logs`** skill for the full field map and query ladder.
 
 ### Direct HTTP fallback
 
@@ -193,3 +224,8 @@ quantile by (environment_name, name) (
 | Averaging `r10`/`r50`/`r90`/`r99` across pods | Averaging percentiles is mathematically meaningless. Use `quantile by (...)` or `max by (...)` — never `avg by` on percentile fields. |
 | Forgetting seconds → ms | `function_times` values are seconds — multiply by 1000 |
 | Missing instrumented methods | Check both `success` and `failure` kinds (on `function_times`) or `field="failures"` (on `function`) |
+| Assuming `field="r99"` exists | Percentiles are absent on otelcol-scraped envs (`storj-select`, `dp-prod-edge-*`, QA). Check `count by (field)` first; fall back to `rate(sum)/rate(count)` |
+| `count by (scope) (function_times{...})` with a broad regex | can return **502** from the datasource. Narrow with `environment_name` + a `scope=~` prefix, or query one scope at a time |
+| Guessing the `name` label | wrappers add prefixes: gateway `__gatewayLayer__GetObjectNInfo`, uplink `__Client__DownloadObject`, metabase `__TiDBAdapter__GetObjectLastCommitted`. A wrong `name` returns no-data that looks like a wrong label. Discover with `count by (name) (function{scope="...", field="errors"})` |
+| Assuming one host = one service | the `cb-select-storage-pa-*` boxes run storagenode + gateway + a co-located US1 satellite-api, split across **two** `environment_name`s: `storj-select` (gateway/storagenode) and `storj-prod-satellite-us1` (satellite-api). Filtering only by `server_name` mixes them |
+| Summing a per-store TiKV gauge | e.g. `tikv_engine_pending_compaction_bytes` has one series per store *and* column family (28 on cb-pa). `sum()` inflates it ~28x — use `max()`/`avg()` and compare against the per-CF limit |
