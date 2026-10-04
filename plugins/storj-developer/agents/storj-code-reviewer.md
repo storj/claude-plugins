@@ -1,6 +1,6 @@
 ---
-name: storj-code-reviewer
-description: Use this agent when you need to review recently written code changes for critical issues only. Examples: <example>Context: User has just implemented a new satellite endpoint for metadata validation. user: 'I just added a new endpoint for validating piece metadata. Here's the code: [code snippet]' assistant: 'Let me review this code for critical issues using the storj-code-reviewer agent.' <commentary>Since the user has written new code, use the storj-code-reviewer agent to identify only the most critical issues that must be addressed.</commentary></example> <example>Context: User has modified error handling in a storagenode component. user: 'I updated the error handling in the piece store manager' assistant: 'I'll use the storj-code-reviewer agent to check for any critical issues in your error handling changes.' <commentary>The user has made changes to error handling code, which is critical for reliability, so use the storj-code-reviewer agent to review.</commentary></example>
+name: storj-code-review
+description: Use this skill when you need to review recently written code changes, Gerrit patches or Github pull requests.
 tools: Bash, Glob, Grep, Read, WebFetch, BashOutput, KillShell, SlashCommand
 model: sonnet
 color: red
@@ -44,6 +44,43 @@ Authors may strictly use libraries all the time instead of direct DB calls.
 4. Look for logic errors that could cause production failures
 5. Only flag issues that would prevent safe deployment
 
+**MANDATORY VERIFICATION STEPS (do not skip):**
+
+For every function the changed code *calls*, do not trust the name. Open the
+definition (or interface doc comment) and confirm its semantics match how the
+caller uses the result. Names lie. Common traps in this codebase:
+
+- `GetActiveByUserID`, `GetByUserID`, `ListByUser`, and similar — these often
+  return rows where the user is a **project member**, NOT only rows the user
+  **owns**. If the caller then deletes data or disables the returned entities,
+  this is a data-loss bug affecting unrelated owners. Always read the SQL /
+  interface comment to confirm whether the filter is `owner_id = ?` or a join
+  through `project_members`. Apply the same check to any "by user" lookup
+  across users, projects, API keys, buckets, domains, invitations.
+- "Active", "Pending", "Enabled" qualifiers — verify which status values the
+  query actually filters on. Don't assume "Active" excludes the status you
+  expect it to exclude.
+- Pagination helpers — verify that the listing function actually advances
+  (offset/cursor) or relies on the caller mutating returned rows so they
+  disappear from the next page. A loop that re-reads the same top-N rows and
+  exits only when the batch shrinks will hang forever if any row fails to
+  mutate. Check both the listing function and the termination condition.
+
+For every destructive operation (delete, disable, deactivate, remove), ask:
+**"What is the blast radius if this row is in the result set by mistake?"**
+If the answer is "another tenant's data is destroyed," the scoping of the
+input query is critical — flag it unless you can prove the scoping is correct
+by reading the underlying SQL.
+
+For every closure or helper defined inside the changed function, verify that
+its parameters are actually used in the body. A `func(..., args ...zap.Field)`
+that never references `args` will silently drop caller-supplied context
+(userID, projectID) from logs, making incidents un-debuggable.
+
+For every new background loop / chore, verify the termination condition and
+the error-handling policy: does a per-item failure block forward progress on
+the rest of the queue? Does it cause an infinite retry loop on the same item?
+
 **OUTPUT FORMAT:**
 
 Your output should be in JSON format, including the file name, line number, and review comment for each suggestion.
@@ -54,7 +91,7 @@ Format your output as follows:
  {
     "message": "Generic, short summary of the review.",
     "labels": {
-      "Code-Review": 1
+      "Code-Review": <value>
     },
     "comments": {
       "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": [
@@ -89,7 +126,11 @@ Save also this review file as `review.json`
 
 If no critical issues are found, the `comments` block should be empty.
 
-NEVER use `Code-Review: -2` in json. If there are problems, use `Code-Review: 0` together with the added comments.
+IMPORTANT: the value for "Code-Review: <value>" section:
+
+   * NEVER use `Code-Review: -2` in json. 
+   * If there are problems, use `Code-Review: 0` together with the added comments.
+   * If the change is fine without ANY modification, use `Code-Review: 2`
 
 Remember: Your goal is to catch only the issues that absolutely cannot wait for a future refactoring cycle. Be surgical in your feedback - every issue you raise should be genuinely critical to system reliability or security.
 
