@@ -25,13 +25,19 @@ Prod code = the deployed tag (see `satellite-infra`), which may be behind `main`
 1. **Frame.** Restate: which peer(s), which region(s), what symptom, since when. If the question
    has no time, use the last 24h at a 1h step. For "is this normal?" also look at 8 days at a 3h step
    (daily patterns are common). If no region, check all four and say which differ.
+   For a daily pattern, compare two ways and say which one each number is: the same hours on
+   earlier days (is today unusual?) and night vs day of the same day (what grows when?).
+   "Rate is not higher" is wrong if you only compared peak to peak.
 2. **Confirm the symptom** with the peer card's key signals on the wide window, then zoom in on
-   the change (1h, step 60s) to find its start time as precisely as you can.
+   the change (1h, step 60s) to find its start time as precisely as you can. Report a start time
+   only as precise as the step you used (1h step → "between 02:00 and 03:00", not "02:50").
 3. **Correlate the start time** with: a deploy (image tag change), an infra config commit, pod
    restarts, a change in a neighbour peer (api ↔ metabase DB, repair ↔ jobq/ranged-loop/core),
    and the same signal in other regions (one region = local cause, all regions = code or shared dependency).
 4. **Go to code.** For the metric that moved, find where it is emitted (`rg` the metric name or
    `__Type__Method`). Read the path around it, including what is swallowed or not counted.
+   For a `failures` counter, list every error return of the function before you name the cause —
+   one counter often mixes several unrelated errors.
    Form a hypothesis that explains the numbers.
 5. **Test the hypothesis** with one or two more queries that would look different if it were wrong.
    If it fails, go back to 3. Stop after ~3 hypotheses and report what you ruled out.

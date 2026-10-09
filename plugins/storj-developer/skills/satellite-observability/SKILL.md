@@ -83,6 +83,10 @@ customer data (bucket names, project ids) — don't copy them into reports unles
 the other us1 repair sites do. No logs for `satellite-change-stream`; `gc-sender` / `gc-bf` only in us1.
 `satellite-ranged-loop` logs ~12 lines/day (low verbosity, not missing). `satellite-repair` replicas
 outside k8s (bare metal) ship nothing. Also: us1 `satellite-api` warns "Storage limit exceeded" ~170k/h — normal.
+**Only warn and error lines are shipped** for satellite peers (checked on repair 2026-10-09). Info-level
+messages in code (e.g. repair "audit failed" with the node ID) are not in ClickHouse — don't search for them;
+say the data is not available. The satellite-api pods (us1) export no Go runtime metrics (GC, heap, goroutines);
+for those you need pprof via the debug port.
 
 Dead or empty datasources (do not use): `afqbg5eubyqyob` (502), `cfpjntp1kao00d`, `de9dc57qvnegwc`,
 `feghujtjgimtcd` (gone), `bfx67nh13k5j4f` (502), `efsa9dkqirrwgd` (VictoriaLogs, empty since 2026-09-22).
@@ -145,8 +149,17 @@ Two families with **different label names** — they do not join:
   ```promql
   sum by (pod) (increase(kube_pod_container_status_restarts_total{environment_name="storj-prod-satellite-us1",namespace="satellite",pod=~"satellite-api-.*"}[1h]))
   ```
-- OTel: `container_cpu_usage` (cumulative CPU-seconds → use `rate()`), `container_memory_working_set_bytes`,
+- OTel: `container_cpu_time_seconds_total` (counter, CPU-seconds → `rate(...[1h])` = cores), `container_memory_working_set_bytes`,
   `k8s_container_memory_limit_bytes`. Labels `k8s_pod_name`, `k8s_namespace_name`, `k8s_container_name`. **No `app` label** — use `k8s_pod_name=~"satellite-api-.*"`.
+  **Do not use `container_cpu_usage` for CPU trends or "near the limit" claims.** It is a gauge in cores sampled
+  once per scrape: `max_over_time` of it shows short spikes (e.g. 15.8 of 16 cores) that are not sustained load,
+  and sums of it jump between steps (46 / 29 / 46 / 29). Use the counter above.
+  ```promql
+  sum(rate(container_cpu_time_seconds_total{environment_name="storj-prod-satellite-us1",k8s_namespace_name="satellite",k8s_pod_name=~"satellite-api-.*",k8s_container_name="satellite"}[1h]))
+  ```
+- cAdvisor (CPU throttling, labels `namespace`, `pod`, `container` like KSM): before saying pods are CPU-starved, check
+  `sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{environment_name="...",namespace="satellite",pod=~"satellite-api-.*",container="satellite"}[1h])) / sum by (pod) (rate(container_cpu_cfs_periods_total{...same...}[1h]))`.
+  A few % or less = not throttled.
 
 Monkit app metrics use a third name for the pod: `kubernetes_pod_name`.
 
@@ -156,5 +169,8 @@ Monkit app metrics use a third name for the pod: `kubernetes_pod_name`.
 2. Aggregate before reading. `sum by (...)` / `max by (...)` — raw series lists are often 50+ series.
 3. Compare regions, but normalize for config first (replicas and flags differ a lot — see `satellite-infra`).
 4. Before you trust a metric, find where it is emitted in code and read what it really counts.
+   For a monkit `failures` counter, list every `return err` path of that function — the counter
+   mixes all of them (e.g. repair `verifyPieceHash` fails on invalid args, piece id change, hash
+   mismatch *and* bad signature; it is not "corrupt pieces").
 5. Change points: compare against deploys (`image.tag` history in infra repo) and config commits.
 6. Write raw data to `~/tmp/<topic>/`, not into your answer.
