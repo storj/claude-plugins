@@ -14,7 +14,9 @@ Read **only** the card(s) you need:
 |---|---|---|
 | api | `satellite-api` | [peers/api.md](peers/api.md) |
 | repair | `satellite-repair`, `*-repair` | [peers/repair.md](peers/repair.md) |
-| core, ranged-loop, auditor, gc-bf, gc-sender, admin, console, change-stream, jobq | `satellite-<name>` | not written yet — build one (below) |
+| ranged-loop | `satellite-ranged-loop` | [peers/ranged-loop.md](peers/ranged-loop.md) |
+| gc-bf (+ gc-sender handoff) | `satellite-gc-bf` | [peers/gc-bf.md](peers/gc-bf.md) |
+| core, auditor, gc-sender, admin, console, change-stream, jobq | `satellite-<name>` | not written yet — build one (below) |
 
 Always also load `satellite-observability` (datasource, selectors, traps) and, for config, `satellite-infra`.
 

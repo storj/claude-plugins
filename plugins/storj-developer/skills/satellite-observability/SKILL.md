@@ -25,7 +25,7 @@ run `list_datasources` once and say what changed in your report.
 Prod satellite logs are in **ClickHouse**, table `otel.otel_logs`, through the Grafana datasource
 `cfqvdb4b1y96oa` (grafana-clickhouse-datasource). They are **not** in VictoriaLogs. Human view:
 dashboard `otel-logs-explorer` (https://grafana.storj.tools/d/otel-logs-explorer). Verified 2026-10-09:
-all four regions, about 24h+ of history, near real time.
+all four regions, near real time, **about 9 days of retention** (oldest rows on 2026-10-09 were from 2026-09-30).
 
 Run SQL through the Grafana API (read-only SELECT):
 ```
@@ -80,12 +80,28 @@ lines; find one example line only after you know which message matters. Log fiel
 customer data (bucket names, project ids) — don't copy them into reports unless needed.
 
 **Coverage gaps (2026-10-09):** us1 `satellite-repair` (the dp-lax k8s repairers) has **no logs**;
-the other us1 repair sites do. No logs for `satellite-change-stream`; `gc-sender` / `gc-bf` only in us1.
+the other us1 repair sites do. No logs for `satellite-change-stream`. gc-bf and gc-sender log in all four regions (gc-bf only while a job runs).
 `satellite-ranged-loop` logs ~12 lines/day (low verbosity, not missing). `satellite-repair` replicas
 outside k8s (bare metal) ship nothing. Also: us1 `satellite-api` warns "Storage limit exceeded" ~170k/h — normal.
-**Only warn and error lines are shipped** for satellite peers (checked on repair 2026-10-09). Info-level
-messages in code (e.g. repair "audit failed" with the node ID) are not in ClickHouse — don't search for them;
-say the data is not available. The satellite-api pods (us1) export no Go runtime metrics (GC, heap, goroutines);
+**Shipped log levels differ per peer** (us1, 2026-10-09): repair (`rh-ewr`, `cb-ash`) **warn + error only**;
+gc-sender **warn only**; api, core, auditor, admin, console info + warn + error; ranged-loop info; gc-bf debug + info.
+So an info message from repair (e.g. "audit failed" with the node ID) is not in ClickHouse — say the data is not
+available instead of searching. Check first: `groupUniqArray(level)` per deployment over 24h.
+
+**Stack traces are split into rows**: each frame of a Go stack trace is its own log row (Body like
+`\t/go/satellite/...go:164`). They pollute `GROUP BY` on the message column — filter on `p[2] IN ('error','warn',...)`
+(frames have no level). zap error fields appear in Body as `exception.message=...` and `exception.stacktrace=...`,
+**not** `error=` — e.g. `arrayFirst(x -> startsWith(x, 'exception.message='), p)`.
+The cause can also be the **last row after the stack frames** (same timestamp +~10 ms, no tab, no level, e.g.
+`Error 8175 (HY000): Your query has been cancelled due to exceeding the allowed memory limit...`).
+**The cause is in separate stderr rows starting with `---`** (`--- context canceled`, `--- metabase: failed to scan
+segments: ...`), with `LogAttributes['log.iostream'] = 'stderr'` and no level — so a level filter hides them. Recipe:
+fetch all raw rows of that pod for ±2 s around the error (`ORDER BY Timestamp`), or
+`WHERE Body LIKE '---%' GROUP BY Body` for a few minutes around it.
+
+**Any SQL error comes back as a bare HTTP 400** with no message (bad syntax, positional `GROUP BY 1` / `GROUP BY 2,3` — group by the real expressions —, too much raw
+data). Simplify the query to find the problem. Aggregate over long windows; fetch raw lines only for a window of
+minutes around a known timestamp. The satellite-api pods (us1) export no Go runtime metrics (GC, heap, goroutines);
 for those you need pprof via the debug port.
 
 Dead or empty datasources (do not use): `afqbg5eubyqyob` (502), `cfpjntp1kao00d`, `de9dc57qvnegwc`,

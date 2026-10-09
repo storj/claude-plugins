@@ -72,7 +72,14 @@ rg -n '"repairer.max-repair"' ~/git/storj/infra/helm/satellites ~/git/storj/infr
 - Map tag to code: `git -C ~/git/storj/storj log --oneline -1 <tag>`; diff two tags to see what a deploy changed.
 - Read code **as deployed** without checking out: `git show <tag>:satellite/metainfo/batch.go`,
   `git grep -n <pattern> <tag> -- satellite/`, `git diff <tag> main -- <path>` (is `main` different?).
-- Live check: `kubectl --context <ctx> -n satellite get deploy -o wide` (read-only).
+- **Live version and rollout time without cluster access** (git shows intent, not what runs — on 2026-10-09 git said
+  v1.164.1 for slc but slc was still on v1.163.6):
+  ```promql
+  count by (environment_name, image) (kube_pod_container_info{environment_name=~"storj-prod-satellite-.*",namespace="satellite",container="satellite",pod=~"satellite-(api|core|ranged-loop)-.*"})
+  max by (environment_name, pod) (kube_pod_start_time{environment_name="storj-prod-satellite-us1",namespace="satellite",pod=~"satellite-ranged-loop.*"})   # range query: exact pod start = rollout time
+  ```
+  An infra commit time is only the merge time, not the rollout.
+- Live check with cluster access: `kubectl --context <ctx> -n satellite get deploy -o wide` (read-only).
 - Recent infra changes (config changes are a common cause of incidents):
   `git -C ~/git/storj/infra log --since=7.days --oneline -- helm/satellites/<region>/`
 
