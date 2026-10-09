@@ -31,8 +31,9 @@ Prod code = the deployed tag (see `satellite-infra`), which may be behind `main`
 2. **Confirm the symptom** with the peer card's key signals on the wide window, then zoom in on
    the change (1h, step 60s) to find its start time as precisely as you can. Report a start time
    only as precise as the step you used (1h step → "between 02:00 and 03:00", not "02:50").
-3. **Correlate the start time** with: a deploy (image tag change), an infra config commit, pod
-   restarts, a change in a neighbour peer (api ↔ metabase DB, repair ↔ jobq/ranged-loop/core),
+3. **Correlate the start time** with: a deploy (pod start times + `image` from `kube_pod_container_info`
+   — recipe in `satellite-infra`; errors seconds before a new pod starts are usually shutdown noise), an
+   infra config commit, pod restarts, a change in a neighbour peer (api ↔ metabase DB, repair ↔ jobq/ranged-loop/core),
    and the same signal in other regions (one region = local cause, all regions = code or shared dependency).
 4. **Go to code.** For the metric that moved, find where it is emitted (`rg` the metric name or
    `__Type__Method`). Read the path around it, including what is swallowed or not counted.
@@ -42,6 +43,10 @@ Prod code = the deployed tag (see `satellite-infra`), which may be behind `main`
 5. **Test the hypothesis** with one or two more queries that would look different if it were wrong.
    If it fails, go back to 3. Stop after ~3 hypotheses and report what you ruled out.
 6. **Answer.**
+
+**Batch / CronJob peers** (gc-bf, and any "did the last N runs succeed?" question): instead of looking for a
+change point, list the runs (pods, start/end, Completed vs Error), give each run's outcome and proof of output
+(peer card names it), then check the consumer got it (e.g. gc-sender). Also check the CronJob is not suspended.
 
 ## Rules
 
@@ -55,7 +60,7 @@ Prod code = the deployed tag (see `satellite-infra`), which may be behind `main`
   messages from `otel.otel_logs` (recipe in `satellite-observability`) to see *what* failed, then find
   the message in code with `rg`. Some peers have no logs (see coverage gaps) — then say so.
 - Same query failing 3 times → stop and report the error text.
-- Raw data → `~/tmp/satellite-investigator/<topic>/`, never into the answer.
+- Large raw pulls → `~/tmp/satellite-investigator/<topic>/`, never pasted into the answer.
 - No secrets in output (vault refs, tokens, connection strings).
 
 ## Answer format
