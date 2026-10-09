@@ -81,7 +81,7 @@ Same `name`/`scope`/env labels as `function_times`. **No `kind` label** — outc
 | `failures` | counter | Error returns | `rate(...[5m])` = error rate |
 | `errors` | counter | Same as `failures` in current monkit | — |
 | `panics` | counter | Go panics caught by monkit | `rate(...[5m])` — should be ~0 |
-| `count` | counter | Completed invocations | `rate(...[5m])` ≈ `rate(total[5m])` |
+| `count` | counter | **Failures split by `error_name`** (e.g. `drpc_ResourceExhausted`); summed it equals `failures` (verified 2026-10-09 on satellite prod) | `sum by (error_name) (rate(...[5m]))` = which errors. Never use for call rate — use `total` |
 | `current` | gauge | In-flight invocations right now | Read as-is |
 | `highwater` | gauge | Peak `current` ever seen | Read as-is |
 | `delta` | counter-ish | Completions since last sample | Rarely useful — prefer `rate(total)` |
@@ -90,7 +90,7 @@ Same `name`/`scope`/env labels as `function_times`. **No `kind` label** — outc
 
 | Question | Metric / field |
 |---|---|
-| What's the request rate? | `rate(function{field="successes"}[5m])` |
+| What's the request rate? | `rate(function{field="total"}[5m])` |
 | What's the error rate? | `rate(function{field="failures"}[5m])` |
 | Error percentage? | `rate(function{field="failures"}[5m]) / rate(function{field="total"}[5m])` |
 | Are we panicking? | `rate(function{field="panics"}[5m])` |
@@ -156,16 +156,16 @@ Verify with `mcp__grafana-cloud__list_datasources(type="prometheus")` if this ch
 ```text
 # 1. Confirm the metric exists in this datasource
 mcp__grafana-cloud__list_prometheus_metric_names(
-    datasourceUid="adoggz37zfda8f", regex="function_times")
+    datasourceUid="ffqrvx0pyhp8gf", regex="function_times")
 
 # 2. Discover real label values (don't guess `environment_name`s)
 mcp__grafana-cloud__list_prometheus_label_values(
-    datasourceUid="adoggz37zfda8f", labelName="environment_name",
+    datasourceUid="ffqrvx0pyhp8gf", labelName="environment_name",
     matches=[{"filters":[{"name":"__name__","type":"=","value":"function_times"}]}])
 
 # 3. Query
 mcp__grafana-cloud__query_prometheus(
-    datasourceUid="adoggz37zfda8f",
+    datasourceUid="ffqrvx0pyhp8gf",
     expr='function_times{name="__Endpoint__CommitObject", scope=~".*satellite_metainfo", field="r99", kind="success"}',
     queryType="range", startTime="now-1h", endTime="now", stepSeconds=60)
 ```
@@ -177,13 +177,8 @@ mcp__grafana-cloud__query_prometheus(
 
 ### Correlating with logs
 
-Storj app logs are in **VictoriaLogs uid `bfx67nh13k5j4f`**, not Loki
-(`grafanacloud-logs` has no `environment_name` values). Query with
-`mcp__grafana-cloud__query_loki_logs` but pass **LogsQL** and `queryType: "range"` —
-`instant` returns nothing. Message text is `_msg`, not `msg`; satellite Go logs use
-`severity`, not `level`. Aggregate with `| stats by (...) count()`; never dump raw records.
-
-See the repo-local **`satellite-logs`** skill for the full field map and query ladder.
+Production satellite logs are in ClickHouse `otel.otel_logs` (Grafana datasource `cfqvdb4b1y96oa`),
+not VictoriaLogs. See the `satellite-observability` skill for the query recipe.
 
 ### Direct HTTP fallback
 
@@ -224,6 +219,7 @@ quantile by (environment_name, name) (
 | Averaging `r10`/`r50`/`r90`/`r99` across pods | Averaging percentiles is mathematically meaningless. Use `quantile by (...)` or `max by (...)` — never `avg by` on percentile fields. |
 | Forgetting seconds → ms | `function_times` values are seconds — multiply by 1000 |
 | Missing instrumented methods | Check both `success` and `failure` kinds (on `function_times`) or `field="failures"` (on `function`) |
+| `sum by (name)` on a plain metric | `name` is a label only on `function`, `function_times` and `tagged_*` series. For plain metrics use `by (__name__)` — otherwise several metrics silently merge into one line. Dividing two `by (__name__)` vectors drops the name; use one query per metric |
 | Assuming `field="r99"` exists | Percentiles are absent on otelcol-scraped envs (`storj-select`, `dp-prod-edge-*`, QA). Check `count by (field)` first; fall back to `rate(sum)/rate(count)` |
 | `count by (scope) (function_times{...})` with a broad regex | can return **502** from the datasource. Narrow with `environment_name` + a `scope=~` prefix, or query one scope at a time |
 | Guessing the `name` label | wrappers add prefixes: gateway `__gatewayLayer__GetObjectNInfo`, uplink `__Client__DownloadObject`, metabase `__TiDBAdapter__GetObjectLastCommitted`. A wrong `name` returns no-data that looks like a wrong label. Discover with `count by (name) (function{scope="...", field="errors"})` |
