@@ -32,7 +32,7 @@ Selector `S` = `app=~".*repair",environment_name="storj-prod-satellite-us1"`. Sc
 | Queue size (from core!) | `sum by (placement) (repair_queue{field="count",app="satellite-core",kubernetes_namespace="satellite",environment_name="storj-prod-satellite-us1",attempted="false"}) > 0` |
 | Mean time in queue (s) | `sum(rate(time_since_checker_queue{field="sum",S}[1d])) / sum(rate(time_since_checker_queue{field="count",S}[1d]))` |
 | Workers idle (queue empty) | `sum(rate(function{field="count",S,scope="storj_io_storj_satellite_repair_repairer",name="__Service__process",error_name="empty_queue"}[1h]))` |
-| CPU / memory | OTel `container_cpu_usage` with `k8s_pod_name=~"satellite-repair-.*"` (only k8s sites; bare metal has none) |
+| CPU / memory | OTel `rate(container_cpu_time_seconds_total[1h])` (not the `container_cpu_usage` gauge) with `k8s_pod_name=~"satellite-repair-.*"` (only k8s sites; bare metal has none) |
 
 R (outcome breakdown):
 ```promql
@@ -79,7 +79,13 @@ Normal us1 noise: "Repair to a storage node failed" ~570k/h (node-side dial/hash
 
 - `repairer:service`: error "process" (queue fetch, fatal), "repair worker failed", "unexpected error repairing segment!".
 - `repairer:segmentrepairer`: warn "irreparable segment", "irreparable segment: too many nodes offline", "irreparable segment: could not acquire enough shares"; error "GetParticipatingNodes returned an invalid result".
-- `repairer:ecrepairer`: warn "Repair to a storage node failed"; info "Failed to download piece for repair: download timeout (contained)".
+- `repairer:ecrepairer`: warn "Repair to a storage node failed".
+- Info lines are **not shipped**, so these are not searchable: "Failed to download piece for repair: download timeout (contained)",
+  and "audit failed" (`ECRepairer.downloadPiece` in `satellite/repair/repairer/ec.go`) — the only place with the node ID of a piece that failed
+  `verifyPieceHash`. No metric or eventkit event has that node ID either. To find which nodes fail hash checks,
+  someone must enable info logs for one repair pool, or change the code to log/emit it.
+- `function{name="verifyPieceHash",field="failures"}` counts 4 different errors together: invalid arguments,
+  "piece id changed", hash mismatch, and invalid piece hash signature. Don't call it "corrupt pieces".
 
 ## Config that matters (`satellite/repair/repairer/repairer.go` `Config`)
 `repairer.max-repair` (release default 5; us1 k8s 70, us1 bare metal 100), `segments-select-batch-size` (1),
