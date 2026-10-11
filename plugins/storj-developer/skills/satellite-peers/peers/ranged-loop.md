@@ -38,6 +38,10 @@ Loop shape (`satellite/metabase/rangedloop/service.go`): `Run` → every `ranged
 
 Normalize for this before comparing regions. A region that differs is a question, not a defect.
 
+**Target (team goal):** at least **1** completed run per day is required; the aim is **3** per day. Beyond that the loop
+is tuned for steady, moderate speed so it does not load the database too much — faster is not better. Do not
+recommend more parallelism or a bigger batch size just to shorten runs if the region already meets the target.
+
 ## Key signals
 Selector `S` = `app="satellite-ranged-loop",kubernetes_namespace="satellite",environment_name="storj-prod-satellite-us1"`.
 Loop scope `L` = `scope="storj_io_storj_satellite_metabase_rangedloop"`.
