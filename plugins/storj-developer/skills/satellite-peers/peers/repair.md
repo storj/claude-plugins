@@ -63,7 +63,7 @@ Lower attempt rate after a backlog drains is normal, not degradation.
 - Shutdown waits for in-flight repairs up to `total-timeout` (45m) — slow rollouts are expected.
 
 ## Traps
-- `repair_queue` is sampled **once per hour** by `QueueStat` in core (`satellite/repair/repairer/queue_stat.go` `RunOnce`).
+- `repair_queue` is sampled by `QueueStat` in core every `repair-queue-check.interval` (default 1h, **prod 15m**) (`satellite/repair/repairer/queue_stat.go` `RunOnce`).
   If the stat query fails it logs "couldn't get repair queue statistic" and **reports 0 for every placement**.
   A sudden all-zero queue = check a placement that is never zero (e.g. eu1 `_40` attempted=true) before calling it "empty".
 - `function_times` percentiles (`r50`, `max`, ...) of `time_since_checker_queue` across pods are misleading — idle pods
