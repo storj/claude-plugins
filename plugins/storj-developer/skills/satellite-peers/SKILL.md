@@ -17,7 +17,8 @@ Read **only** the card(s) you need:
 | ranged-loop | `satellite-ranged-loop` | [peers/ranged-loop.md](peers/ranged-loop.md) |
 | gc-bf (+ gc-sender handoff) | `satellite-gc-bf` | [peers/gc-bf.md](peers/gc-bf.md) |
 | core | `satellite-core` | [peers/core.md](peers/core.md) |
-| auditor, gc-sender, admin, console, change-stream, jobq | `satellite-<name>` | not written yet — build one (below) |
+| gc-sender | `satellite-gc-sender` | [peers/gc-sender.md](peers/gc-sender.md) |
+| auditor, admin, console, change-stream, jobq | `satellite-<name>` | not written yet — build one (below) |
 
 Always also load `satellite-observability` (datasource, selectors, traps) and, for config, `satellite-infra`.
 

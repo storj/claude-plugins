@@ -85,7 +85,8 @@ Baselines (2026-10-09):
 
 ## Silent failures
 - **"target bucket was not empty, stop operation and wait for next execution"** (warn) → `return nil`, nothing published,
-  run looks successful. Usually means gc-sender has not finished moving the previous generation.
+  run looks successful. It checks only the run's **new** upload prefix (`checkEmpty`/`freshPrefix` in `upload.go`), so it
+  fires only on a prefix collision — it does **not** coordinate with gc-sender (0 lines in 9d as of 2026-10-12).
 - **Publish guard**: "the scan processed %d segments, the snapshot holds %d" / "the segments count of the snapshot is unknown" —
   filters correctly **not** published. Repeated guard failures = nodes get no new filters (garbage grows) — investigate.
 - **"segment created after loop started"** (bloomfilter observer `Process`) → observer fails for the whole run (snapshot
