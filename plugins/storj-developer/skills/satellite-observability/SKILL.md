@@ -17,6 +17,8 @@ run `list_datasources` once and say what changed in your report.
 | Prod satellite **logs** | **Yes** (most peers) | ClickHouse `otel.otel_logs` via `cfqvdb4b1y96oa` — see Logs below |
 | Traces / profiles | No satellite data in Tempo/Pyroscope | live pprof via `satellite-debug-port` skill |
 | Eventkit events | Not in Grafana | ClickHouse warehouse (if you have access) |
+| Satellite DB (nodes, reputation, ...) | Yes, read-only SELECT | Grafana Postgres datasources — see Satellite DB below |
+| Select storage node metrics | Yes (`storj-select`, `select-eu`) | same VictoriaMetrics — see Select fleet below |
 | Prod config, version | git | `satellite-infra` skill |
 | Live process state | debug port: `/mon/stats`, `/debug/pprof`, `/metrics` | `satellite-debug-port` skill |
 
@@ -107,6 +109,40 @@ for those you need pprof via the debug port.
 Dead or empty datasources (do not use): `afqbg5eubyqyob` (502), `cfpjntp1kao00d`, `de9dc57qvnegwc`,
 `feghujtjgimtcd` (gone), `bfx67nh13k5j4f` (502), `efsa9dkqirrwgd` (VictoriaLogs, empty since 2026-09-22).
 There is no Thanos datasource any more.
+
+## Satellite DB (read-only SQL, verified 2026-10-21)
+
+Grafana Postgres datasources: us1 `afrrqq1u668sge`, eu1 `ffx4danf5xm9sd`, ap1 `cfx4dkk6xcbuod`, slc `efx4drsst3pc0c`.
+Use them for the **current state of nodes** — this is the source of truth, logs and metrics cannot give it:
+`nodes.last_contact_success`, `disqualified`, `disqualification_reason` (1 = audit, 3 = offline / stray node),
+`unknown_audit_suspended`, `offline_suspended`, `exit_initiated_at`, `exit_finished_at`, `piece_count` (stale),
+`email`, `last_net`; host and server group in `node_tags`.
+Successful node check-ins are **not logged**, so "did the node come back?" can only be answered here.
+```
+grafana_api_request POST /api/ds/query
+{"from":"now-1h","to":"now","queries":[{"refId":"A","format":"table",
+  "datasource":{"uid":"afrrqq1u668sge"},"rawSql":"SELECT ..."}]}
+jq: .results.A.frames[0].data.values
+```
+- Node IDs are `bytea`: filter with `id IN ('\x<hex>', ...)`, print with `encode(id,'hex')`. Logs use base58 node IDs.
+- Select nodes: `email = 'ops@storj.io'`. Online now: `last_contact_success > now() - interval '4 hours'`.
+- Host of a node: `(SELECT convert_from(value,'UTF8') FROM node_tags t WHERE t.node_id = n.id AND t.name = 'host')`.
+- Emails and wallets are personal data: group by `md5(email)` in reports.
+
+## Select fleet (storage nodes run by Storj, verified 2026-10-21)
+
+Select hosts (`cb-select-storage-*`, `rh-select-storage-*`) run many storagenode containers each and report metrics with
+`environment_name="storj-select"` (EU: `select-eu`), label `server_name` = host. There is no `app`/`satellite` label.
+A Select outage looks like a **satellite repair problem**: Select placements use a tight RS scheme, so one lost piece
+already needs repair. **Host metrics hide dead nodes** — node-exporter stays up while containers are stopped. Count per node:
+```promql
+# storagenode processes reporting, per host (drop = nodes down)
+count by (server_name) (used_space{environment_name="storj-select",field="sum"})
+# running containers per host (includes cadvisor/otelcol, so a few more than nodes)
+count by (server_name) (container_cpu_utilization_ratio{server_name=~"cb-select-storage-.*"})
+```
+If container count is flat but `used_space` count dropped, the process is hung, not stopped. Compare both over 2–3 days
+at a 15m step and look for steps down. Kernel/disk trouble on a host: `select-kernel-log` skill.
 
 ## Mandatory selectors
 

@@ -1,6 +1,6 @@
 ---
 name: satellite-investigator
-description: Investigates a production Storj satellite peer (api, repair, core, ranged-loop, auditor, gc, admin, console, change-stream, jobq) - "why is X slow/failing/growing in region Y since T?". Joins prod metrics from Grafana with the satellite source code and the infra config, and returns a root-cause answer with evidence. Read-only. Use for debugging incidents or checking a peer's health on demand.
+description: Investigates a production Storj satellite peer (api, repair, core, ranged-loop, auditor, gc, admin, console, change-stream, jobq) - "why is X slow/failing/growing in region Y since T?". Joins prod metrics from Grafana with the satellite source code and the infra config, and returns a root-cause answer with evidence. Read-only. Use for debugging incidents, checking a peer's health on demand, or a fleet-wide health sweep of all peers.
 model: opus
 color: red
 ---
@@ -44,6 +44,14 @@ Prod code = the deployed tag (see `satellite-infra`), which may be behind `main`
    If it fails, go back to 3. Stop after ~3 hypotheses and report what you ruled out.
 6. **Answer.**
 
+**Health sweep** ("are all peers healthy?", "check all regions"): do not use steps 1–6 per peer. Follow
+`health-sweep.md` in the `satellite-peers` skill: its checklist, its known-noise list, and its report format.
+Dig into a finding (steps 3–5) only if it may need action.
+
+**Node-side causes.** When repair or audit numbers move, find out whether storage nodes went away before you blame the
+satellite: core offline-node events, the satellite DB (`nodes.last_contact_success`), and for Select placements the Select
+fleet counts per host (`satellite-observability`). Remember the 16h online-window delay.
+
 **Batch / CronJob peers** (gc-bf, and any "did the last N runs succeed?" question): instead of looking for a
 change point, list the runs (pods, start/end, Completed vs Error), give each run's outcome and proof of output
 (peer card names it), then check the consumer got it (e.g. gc-sender). Also check the CronJob is not suspended.
@@ -61,6 +69,11 @@ change point, list the runs (pods, start/end, Completed vs Error), give each run
   the message in code with `rg`. Some peers have no logs (see coverage gaps) — then say so.
 - Same query failing 3 times → stop and report the error text.
 - Large raw pulls → `~/tmp/satellite-investigator/<topic>/`, never pasted into the answer.
+- **Always leave notes for a follow-up.** Before you answer, write `~/tmp/satellite-investigator/<topic>/notes.md`:
+  question, findings, IDs (nodes, pods, hosts), and the queries that worked. Put the path in the last line of your answer.
+  A follow-up run may be a fresh agent that only gets this file.
+- **Health claims need the right level.** "Host is up" does not mean its storage nodes are up; "container count
+  is flat" does not mean the processes report. Say what you measured.
 - No secrets in output (vault refs, tokens, connection strings).
 
 ## Answer format

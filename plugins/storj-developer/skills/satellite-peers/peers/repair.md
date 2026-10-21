@@ -63,6 +63,18 @@ Lower attempt rate after a backlog drains is normal, not degradation.
 - Shutdown waits for in-flight repairs up to `total-timeout` (45m) — slow rollouts are expected.
 
 ## Traps
+- **The queue has a cap.** jobq keeps at most `max-mem-per-placement` / 72 B (record size) jobs per placement; us1 live
+  1.5 GiB ≈ **22,369,621** (git says 2.5 GiB — drift, see [jobq.md](jobq.md)). Jobs above the cap are dropped silently.
+  A `repair_queue` value stuck at ~22.37M = the placement is **full**, not the real backlog. The real number is
+  `sum by (placement) (remote_segments_needing_repair{field="recent",app="satellite-ranged-loop",kubernetes_namespace="satellite",environment_name="..."})`.
+  Details: [jobq.md](jobq.md).
+- **16 h delay.** `checker.online-window` and `repairer.online-window` are **16h** in all regions (code default 4h). A node
+  counts as offline for the checker only 16 h after its last contact. So a repair flood today often comes from a node
+  outage that started **16–24 h earlier** — always look back that far. Example: 2026-10-21 us1, Select placements `_12`,
+  `_20`, `_31` went from ~1.5M to 138M needing repair at the 04:20 checker run; the cause was 33 cb_pa storagenodes stopped
+  since 2026-10-20 ~11:15. Node state: satellite DB (`satellite-observability`).
+- **Select placements (`_12`, `_20`, `_31`, ...)**: one lost piece already triggers repair, so ~100 Select nodes down hits
+  ~8% of `_20`. When only Select placements jump, check the Select fleet first (`satellite-observability` → Select fleet).
 - `repair_queue` is sampled by `QueueStat` in core every `repair-queue-check.interval` (default 1h, **prod 15m**) (`satellite/repair/repairer/queue_stat.go` `RunOnce`).
   If the stat query fails it logs "couldn't get repair queue statistic" and **reports 0 for every placement**.
   A sudden all-zero queue = check a placement that is never zero (e.g. eu1 `_40` attempted=true) before calling it "empty".
@@ -99,4 +111,6 @@ Sites differ a lot: compare `rg -n 'repairer\.' ~/git/storj/infra/helm/satellite
 - Queue growing but workers idle → checker / ranged-loop (`app="satellite-ranged-loop"`, `remote_segments_needing_repair{field="recent"}`, `remote_segments_lost`) or jobq health (`app="jobq"`).
 - Node waves (offline/online) → `max by (__name__) ({__name__=~"checker_offline_nodes|checker_online_nodes",field="recent",app="satellite-ranged-loop",kubernetes_namespace="satellite",environment_name="..."})`.
 - Many download failures → storage node side (offline nodes, overlay) or network at one site — compare `by (app)`.
+- Which nodes went offline → core logs `node event inserted name=offline` (hourly chore at :56, with node ID and email,
+  see [core.md](core.md)), then their current state in the satellite DB.
 - High CPU → known 2026-10 profile: TLS handshakes ~25%, little connection reuse in `rpcpool`.

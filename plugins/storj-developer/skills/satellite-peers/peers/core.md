@@ -98,6 +98,16 @@ Q2 "healthy" ceilings: tally < interval + run time (us1 ≲ 9h, slc ≲ 3.5h); 2
 - **Node events**: a batch with an invalid email is marked sent and dropped ("invalid email", ~1.2k/week per region — normal).
   A `Notify` failure ends the cycle and retries after 5m; the backlog has no metric.
 - **Repair queue stat** reports **0 for every placement** when its stat query fails ("couldn't get repair queue statistic").
+- **Stray nodes DQ bursts after every core restart are normal.** The chore runs at pod start and then every 168h, and
+  DQs nodes with no successful contact for `stray-nodes.max-duration-without-contact` (720h); reason
+  `disqualification_reason = 3`. It loops while a batch equals `limit` (1000), so one run can DQ more than 1000. A deploy
+  moves the weekly schedule, so a run can catch several extra days of old offline nodes. Baseline us1 2026-08..10:
+  25–527 per run; 2026-10-20 (v1.165.3 restart) us1 1048, eu1 752, ap1 684, slc 294 — operator fleets that went silent on
+  2026-09-20. Errors are logged ("error disqualifying stray nodes") and return nil. Log: `Disqualified dq_type="stray node"`.
+  Before calling a burst a bug, check `last_contact_success` of the DQed nodes in the satellite DB.
+- **Offline node events** (`InsertOfflineNodeEvents`, hourly at :56) log `node event inserted name=offline` with node ID and
+  operator email — the fastest list of "which nodes went offline when". There is **no log for a node coming back**
+  (successful check-ins are not logged); use `nodes.last_contact_success` in the satellite DB.
 - **`enabled` flags that do nothing in the modular build**: `account-freeze.enabled`, `console-db-cleanup.enabled`,
   `rollup-archive.enabled`. To stop such a chore you must use `--components=!pkg.Type`.
 
