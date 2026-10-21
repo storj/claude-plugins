@@ -18,7 +18,11 @@ Read **only** the card(s) you need:
 | gc-bf (+ gc-sender handoff) | `satellite-gc-bf` | [peers/gc-bf.md](peers/gc-bf.md) |
 | core | `satellite-core` | [peers/core.md](peers/core.md) |
 | gc-sender | `satellite-gc-sender` | [peers/gc-sender.md](peers/gc-sender.md) |
-| auditor, admin, console, change-stream, jobq | `satellite-<name>` | not written yet — build one (below) |
+| jobq (repair queue server) | `jobq` | [peers/jobq.md](peers/jobq.md) |
+| auditor | `satellite-auditor` | [peers/auditor.md](peers/auditor.md) |
+| admin, console, change-stream | `satellite-<name>` | not written yet — build one (below) |
+
+Fleet-wide "are all peers healthy?" check: follow [health-sweep.md](health-sweep.md) (checklist + known noise).
 
 Always also load `satellite-observability` (datasource, selectors, traps) and, for config, `satellite-infra`.
 
