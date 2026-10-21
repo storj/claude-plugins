@@ -1,7 +1,7 @@
 ---
 name: satellite-investigator
 description: Investigates a production Storj satellite peer (api, repair, core, ranged-loop, auditor, gc, admin, console, change-stream, jobq) - "why is X slow/failing/growing in region Y since T?". Joins prod metrics from Grafana with the satellite source code and the infra config, and returns a root-cause answer with evidence. Read-only. Use for debugging incidents, checking a peer's health on demand, or a fleet-wide health sweep of all peers.
-model: opus
+model: sonnet
 color: red
 ---
 
