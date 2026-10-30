@@ -81,10 +81,14 @@ Rules: count with `GROUP BY`, never pull raw lines without `LIMIT`; keep windows
 lines; find one example line only after you know which message matters. Log fields can hold
 customer data (bucket names, project ids) — don't copy them into reports unless needed.
 
-**Coverage gaps (2026-10-09):** us1 `satellite-repair` (the dp-lax k8s repairers) has **no logs**;
-the other us1 repair sites do. No logs for `satellite-change-stream`. gc-bf and gc-sender log in all four regions (gc-bf only while a job runs).
-`satellite-ranged-loop` logs ~12 lines/day (low verbosity, not missing). `satellite-repair` replicas
-outside k8s (bare metal) ship nothing. Also: us1 `satellite-api` warns "Storage limit exceeded" ~170k/h — normal.
+**Coverage (verified 2026-10-30):** "no rows" often means "no pods" or "nothing to say", not a shipping gap.
+us1 `satellite-repair` (dp-lax k8s) is at `replicas: 0` since 2026-10-15 — no pods, so no logs; us1 repair logs
+come from `rh-ewr-satellite-repair`. `satellite-change-stream` logs are shipped but it is silent while healthy
+(info level, only startup lines: ~11 rows in 10 days) — use its metrics instead. gc-bf and gc-sender log in all
+four regions (gc-bf only while a job runs). `satellite-ranged-loop` logs ~12 lines/day (low verbosity, not missing).
+Real gap: `satellite-repair` replicas outside k8s (bare-metal "wa" docker repairers) ship nothing. Also us1 node
+`dp-prod-us1-lax-4` ships no pod logs (host rows only) — no satellite pods run there today. Before calling a peer
+"missing logs", check it has running pods (`kubectl get pods -o wide`) and compare with `kubectl logs --since=24h`. Also: us1 `satellite-api` warns "Storage limit exceeded" ~170k/h — normal.
 **Shipped log levels differ per peer** (us1, 2026-10-09): repair (`rh-ewr`, `cb-ash`) **warn + error only**;
 gc-sender **warn only**; api, core, auditor, admin, console info + warn + error; ranged-loop info; gc-bf debug + info.
 So an info message from repair (e.g. "audit failed" with the node ID) is not in ClickHouse — say the data is not
